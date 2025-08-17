@@ -15,7 +15,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, query, doc, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDoc, getDocs, query, doc, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         window.firebase = {
             initializeApp,
@@ -24,13 +24,13 @@
             getFirestore,
             collection,
             addDoc,
+            getDoc,
             getDocs,
             query,
             doc,
             runTransaction
         };
     </script>
-    <!-- FIX: Updated font loading to use <link> for better reliability -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Changa:wght@700&family=Almarai:wght@400;700&display=swap" rel="stylesheet">
@@ -38,9 +38,27 @@
         body {
             font-family: 'Almarai', sans-serif;
         }
+        .invoice-print-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 10px;
+            font-family: 'Almarai', sans-serif;
+            direction: rtl;
+        }
+        .invoice-header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 15px; margin-bottom: 15px; }
+        .invoice-header h2 { margin: 0; font-size: 1.5em; font-family: 'Changa', sans-serif; }
+        .invoice-header p { margin: 0; font-size: 1em; font-weight: bold; }
+        .invoice-details p { margin: 3px 0; font-weight: bold; }
+        .invoice-details { border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
+        .invoice-items { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        .invoice-items th, .invoice-items td { padding: 8px; text-align: right; font-weight: bold; }
+        .invoice-items th { border-bottom: 1px solid #000; }
+        .invoice-totals { text-align: right; border-top: 2px dashed #000; padding-top: 10px; }
+        .invoice-totals div { display: flex; justify-content: space-between; margin-bottom: 3px; font-weight: bold; }
+        .invoice-footer { text-align: center; margin-top: 15px; font-size: 0.8em; }
     </style>
 </head>
-<body dir="rtl">
+<body dir="rtl" class="bg-red-600">
     <div id="root"></div>
 
     <script type="text/babel">
@@ -49,7 +67,7 @@
         const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
 
         // Destructure Firebase methods from the global window object
-        const { initializeApp, getAuth, signInAnonymously, getFirestore, collection, addDoc, getDocs, query, doc, runTransaction } = window.firebase;
+        const { initializeApp, getAuth, signInAnonymously, getFirestore, collection, addDoc, getDoc, getDocs, query, doc, runTransaction } = window.firebase;
 
         const { useState, useEffect, useRef, useCallback } = React;
 
@@ -70,18 +88,25 @@
             const [showSavedOrders, setShowSavedOrders] = useState(false);
             const [isLoadingOrderNumber, setIsLoadingOrderNumber] = useState(true);
             const [isOrderSaved, setIsOrderSaved] = useState(false);
+            const [sharedInvoiceId, setSharedInvoiceId] = useState(null);
             
             const dbRef = useRef(null);
             const authRef = useRef(null);
             const userIdRef = useRef(null);
             
+            const displayStatus = (message, type) => {
+                setStatusMessage({ message, type });
+                setTimeout(() => setStatusMessage({ message: '', type: '' }), 3000);
+            };
+
             const fetchAndIncrementOrderNumber = useCallback(async () => {
+                // If Firebase is not ready (e.g., saved as a local HTML file), provide a fallback.
                 if (!dbRef.current || !userIdRef.current) {
-                    console.error("Firestore DB or User ID is not initialized.");
+                    setOrderNumber(Date.now().toString());
+                    setIsLoadingOrderNumber(false);
                     return;
                 }
 
-                // Changed the path to a user-specific counter to resolve permissions issues
                 const counterRef = doc(dbRef.current, `/artifacts/${appId}/users/${userIdRef.current}/counters/order_number`);
                 setIsLoadingOrderNumber(true);
                 let newOrderNumber = null;
@@ -93,18 +118,10 @@
                         newOrderNumber = currentNumber + 1;
                         transaction.set(counterRef, { currentNumber: newOrderNumber });
                     });
-                    console.log("Order number fetched and incremented:", newOrderNumber);
                     setOrderNumber(newOrderNumber.toString());
                 } catch (error) {
                     console.error("Error in transaction for order number:", error);
                     displayStatus('حدث خطأ في جلب رقم الطلب. يرجى المحاولة مرة أخرى.', 'error');
-                    const now = new Date();
-                    const year = now.getFullYear().toString().slice(-2);
-                    const month = (now.getMonth() + 1).toString().padStart(2, '0');
-                    const day = now.getDate().toString().padStart(2, '0');
-                    const hours = now.getHours().toString().padStart(2, '0');
-                    const minutes = now.getMinutes().toString().padStart(2, '0');
-                    setOrderNumber(`${year}${month}${day}${hours}${minutes}`);
                 } finally {
                     setIsLoadingOrderNumber(false);
                 }
@@ -120,21 +137,25 @@
                 setItems([{ id: 1, name: '', quantity: 1, price: '' }]);
                 setTotal(0);
                 setIsOrderSaved(false);
+                setSharedInvoiceId(null);
                 fetchAndIncrementOrderNumber();
             }, [fetchAndIncrementOrderNumber]);
             
+            // Initial Firebase and data fetch effect
             useEffect(() => {
                 const initFirebase = async () => {
                     try {
                         if (Object.keys(firebaseConfig).length === 0) {
                             displayStatus('إعدادات Firebase غير متوفرة. لا يمكن حفظ البيانات.', 'error');
+                            // Fallback for local usage
+                            setIsDbReady(false);
+                            fetchAndIncrementOrderNumber();
                             return;
                         }
                         const app = initializeApp(firebaseConfig);
                         authRef.current = getAuth(app);
                         dbRef.current = getFirestore(app);
                         
-                        // Use signInAnonymously as a fallback for the token
                         await signInAnonymously(authRef.current);
                         
                         userIdRef.current = authRef.current?.currentUser?.uid || crypto.randomUUID();
@@ -147,17 +168,51 @@
                 };
 
                 initFirebase();
-            }, [firebaseConfig]);
+            }, [firebaseConfig, fetchAndIncrementOrderNumber]);
 
+            // Effect to handle URL parameters for shared invoices
             useEffect(() => {
-                if (isDbReady) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const invoiceId = urlParams.get('invoice');
+                if (isDbReady && invoiceId) {
+                    setSharedInvoiceId(invoiceId);
+                    fetchInvoiceById(invoiceId);
+                } else if (isDbReady && !invoiceId) {
                     fetchSalesData();
                     resetForm();
                 }
-            }, [isDbReady, resetForm]);
+            }, [isDbReady, fetchAndIncrementOrderNumber, resetForm]);
+
+            const fetchInvoiceById = async (invoiceId) => {
+                try {
+                    const docRef = doc(dbRef.current, `/artifacts/${appId}/users/${userIdRef.current}/orders`, invoiceId);
+                    const docSnap = await getDoc(docRef);
+
+                    if (docSnap.exists()) {
+                        const order = docSnap.data();
+                        setBranchName(order.branchName);
+                        setCashierName(order.cashierName);
+                        setDeliveryName(order.deliveryName);
+                        setCustomerName(order.customerName);
+                        setCustomerPhone(order.customerPhone);
+                        setOrderNumber(order.orderNumber);
+                        setOrderDate(order.orderDate.slice(0, 16));
+                        setItems(order.items.map((item, index) => ({ ...item, id: index + 1 })));
+                        setTotal(order.total);
+                        setIsOrderSaved(true);
+                    } else {
+                        displayStatus('لم يتم العثور على الفاتورة.', 'error');
+                        setSharedInvoiceId(null);
+                    }
+                } catch (error) {
+                    console.error("Error fetching invoice:", error);
+                    displayStatus('حدث خطأ في جلب الفاتورة.', 'error');
+                    setSharedInvoiceId(null);
+                }
+            };
 
             const fetchSalesData = async () => {
-                if (!isDbReady) return;
+                if (!isDbReady || !userIdRef.current) return;
 
                 try {
                     const ordersCollectionRef = collection(dbRef.current, `/artifacts/${appId}/users/${userIdRef.current}/orders`);
@@ -166,7 +221,7 @@
                     
                     const fetchedData = [];
                     querySnapshot.forEach((doc) => {
-                        fetchedData.push(doc.data());
+                        fetchedData.push({ id: doc.id, ...doc.data() });
                     });
                     setSalesData(fetchedData);
                 } catch (error) {
@@ -175,11 +230,6 @@
                 }
             };
             
-            const displayStatus = (message, type) => {
-                setStatusMessage({ message, type });
-                setTimeout(() => setStatusMessage({ message: '', type: '' }), 3000);
-            };
-
             const calculateTotal = useCallback(() => {
                 const newTotal = items.reduce((sum, item) => {
                     const quantity = Number(item.quantity) || 0;
@@ -265,89 +315,116 @@
             };
 
             const handlePrintInvoice = () => {
+                // If a shared invoice is being viewed, prevent printing
+                if (sharedInvoiceId) {
+                    displayStatus('لا يمكن طباعة فاتورة تمت مشاركتها.', 'error');
+                    return;
+                }
+
                 if (!isOrderSaved) {
                     displayStatus('يجب حفظ الطلب أولاً قبل الطباعة.', 'error');
                     return;
                 }
 
-                const invoiceWindow = window.open('', '_blank');
+                // Construct the HTML for printing directly from state variables for robustness
                 const invoiceContent = `
-                    <!DOCTYPE html>
-                    <html lang="ar">
-                    <head>
-                        <meta charset="UTF-8">
-                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                        <title>فاتورة حلواني لابوم</title>
-                        <style>
-                            body { font-family: 'Almarai', sans-serif; direction: rtl; margin: 0; padding: 20px; color: #000; }
-                            .invoice { width: 100%; max-width: 400px; margin: 0 auto; padding: 10px; }
-                            .invoice-header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 15px; margin-bottom: 15px; }
-                            .invoice-header h2 { margin: 0; font-size: 1.5em; font-family: 'Changa', sans-serif; }
-                            .invoice-header p { margin: 0; font-size: 1em; font-weight: bold; }
-                            .invoice-details p { margin: 3px 0; font-weight: bold; }
-                            .invoice-details { border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
-                            .invoice-items { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-                            .invoice-items th, .invoice-items td { padding: 8px; text-align: right; font-weight: bold; }
-                            .invoice-items th { border-bottom: 1px solid #000; }
-                            .invoice-totals { text-align: right; border-top: 2px dashed #000; padding-top: 10px; }
-                            .invoice-totals div { display: flex; justify-content: space-between; margin-bottom: 3px; font-weight: bold; }
-                            .invoice-footer { text-align: center; margin-top: 15px; font-size: 0.8em; }
-                            @media print {
-                                .invoice h2, .invoice-details p, .invoice-details strong, .invoice-items th, .invoice-items td, .invoice-totals div { font-weight: 700 !important; }
-                            }
-                        </style>
-                    </head>
-                    <body>
-                        <div class="invoice">
-                            <div class="invoice-header">
-                                <h2>حلواني لابوم</h2>
-                                <p>ت 01200016131</p>
-                            </div>
-                            <div class="invoice-details">
-                                <p><strong>التاريخ:</strong> ${new Date(orderDate).toLocaleString('ar-EG', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                                <p><strong>رقم الطلب:</strong> ${orderNumber}</p>
-                                <p><strong>الفرع:</strong> ${branchName}</p>
-                                <p><strong>الكاشير:</strong> ${cashierName}</p>
-                                <p><strong>الطيار:</strong> ${deliveryName}</p>
-                                <p><strong>العميل:</strong> ${customerName}</p>
-                                <p><strong>التليفون:</strong> ${customerPhone}</p>
-                            </div>
-                            <table class="invoice-items">
-                                <thead>
-                                    <tr>
-                                        <th style="text-align: right;">الصنف</th>
-                                        <th style="text-align: right;">السعر</th>
-                                        <th style="text-align: center;">الكمية</th>
-                                        <th style="text-align: right;">الإجمالي</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${items.filter(item => item.name).map(item => `
-                                        <tr>
-                                            <td>${item.name}</td>
-                                            <td style="text-align: right;">${Number(item.price).toFixed(2)} ج.م</td>
-                                            <td style="text-align: center;">${item.quantity}</td>
-                                            <td style="text-align: right;">${(Number(item.quantity) * Number(item.price)).toFixed(2)} ج.م</td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                            <div class="invoice-totals">
-                                <div><span>الإجمالي الكلي:</span> <span>${total.toFixed(2)} ج.م</span></div>
-                            </div>
-                            <div class="invoice-footer">
-                                <p>شكرًا لك على ثقتك بنا!</p>
-                                <p>تفضل بزيارتنا مرة أخرى.</p>
-                            </div>
+                    <div class="invoice-print-container">
+                        <div class="invoice-header">
+                            <h2>حلواني لابوم</h2>
+                            <p>ت 01200016131</p>
                         </div>
-                    </body>
-                    </html>
+                        <div class="invoice-details">
+                            <p><strong>التاريخ:</strong> ${new Date(orderDate).toLocaleString('ar-EG', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                            <p><strong>رقم الطلب:</strong> ${orderNumber}</p>
+                            <p><strong>الفرع:</strong> ${branchName}</p>
+                            <p><strong>الكاشير:</strong> ${cashierName}</p>
+                            <p><strong>الطيار:</strong> ${deliveryName}</p>
+                            <p><strong>العميل:</strong> ${customerName}</p>
+                            <p><strong>التليفون:</strong> ${customerPhone}</p>
+                        </div>
+                        <table class="invoice-items">
+                            <thead>
+                                <tr>
+                                    <th style="text-align: right;">الصنف</th>
+                                    <th style="text-align: right;">السعر</th>
+                                    <th style="text-align: center;">الكمية</th>
+                                    <th style="text-align: right;">الإجمالي</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.filter(item => item.name).map((item, index) => `
+                                    <tr key=${index}>
+                                        <td>${item.name}</td>
+                                        <td style="text-align: right;">${Number(item.price).toFixed(2)} ج.م</td>
+                                        <td style="text-align: center;">${item.quantity}</td>
+                                        <td style="text-align: right;">${(Number(item.quantity) * Number(item.price)).toFixed(2)} ج.م</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                        <div class="invoice-totals">
+                            <div><span>الإجمالي الكلي:</span> <span>${total.toFixed(2)} ج.م</span></div>
+                        </div>
+                        <div class="invoice-footer">
+                            <p>شكرًا لك على ثقتك بنا!</p>
+                            <p>تفضل بزيارتنا مرة أخرى.</p>
+                        </div>
+                    </div>
                 `;
-                invoiceWindow.document.write(invoiceContent);
-                invoiceWindow.document.close();
-                invoiceWindow.print();
+
+                const printWindow = window.open('', '', 'height=600,width=800');
+                printWindow.document.write('<html><head><title>Print Invoice</title>');
+                printWindow.document.write('<style>');
+                printWindow.document.write('body { font-family: \'Almarai\', sans-serif; direction: rtl; margin: 0; padding: 20px; color: #000; }');
+                printWindow.document.write('.invoice-print-container { width: 100%; max-width: 400px; margin: 0 auto; padding: 10px; }');
+                printWindow.document.write('.invoice-header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 15px; margin-bottom: 15px; }');
+                printWindow.document.write('.invoice-header h2 { margin: 0; font-size: 1.5em; font-family: \'Changa\', sans-serif; }');
+                printWindow.document.write('.invoice-header p { margin: 0; font-size: 1em; font-weight: bold; }');
+                printWindow.document.write('.invoice-details p { margin: 3px 0; font-weight: bold; }');
+                printWindow.document.write('.invoice-details { border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }');
+                printWindow.document.write('.invoice-items { width: 100%; border-collapse: collapse; margin-bottom: 10px; }');
+                printWindow.document.write('.invoice-items th, .invoice-items td { padding: 8px; text-align: right; font-weight: bold; }');
+                printWindow.document.write('.invoice-items th { border-bottom: 1px solid #000; }');
+                printWindow.document.write('.invoice-totals { text-align: right; border-top: 2px dashed #000; padding-top: 10px; }');
+                printWindow.document.write('.invoice-totals div { display: flex; justify-content: space-between; margin-bottom: 3px; font-weight: bold; }');
+                printWindow.document.write('.invoice-footer { text-align: center; margin-top: 15px; font-size: 0.8em; }');
+                printWindow.document.write('@media print { .no-print { display: none; } }');
+                printWindow.document.write('</style>');
+                printWindow.document.write('</head><body>');
+                printWindow.document.write(invoiceContent);
+                printWindow.document.write('</body></html>');
+                printWindow.document.close();
+                printWindow.print();
             };
 
+            const handleShareInvoice = async () => {
+                if (!isOrderSaved) {
+                    displayStatus('يجب حفظ الطلب أولاً قبل المشاركة.', 'error');
+                    return;
+                }
+                const orderToShare = salesData.find(order => order.orderNumber === orderNumber);
+                if (!orderToShare) {
+                    displayStatus('خطأ: لم يتم العثور على الطلب المحفوظ.', 'error');
+                    return;
+                }
+                
+                const shareableUrl = `${window.location.origin}${window.location.pathname}?invoice=${orderToShare.id}`;
+                
+                try {
+                    await navigator.clipboard.writeText(shareableUrl);
+                    displayStatus('تم نسخ الرابط إلى الحافظة!', 'success');
+                } catch (err) {
+                    // Fallback for environments where Clipboard API is not available
+                    const textarea = document.createElement('textarea');
+                    textarea.value = shareableUrl;
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    displayStatus('تم نسخ الرابط إلى الحافظة (طريقة احتياطية).', 'success');
+                }
+            };
+            
             const totalRevenue = salesData.reduce((sum, order) => sum + order.total, 0);
             const totalOrders = salesData.length;
 
@@ -401,7 +478,61 @@
                 );
             };
 
-            const renderContent = () => {
+            const renderInvoiceView = () => {
+                return (
+                    <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-sm" id="invoice-to-print">
+                        <div className="invoice-print-container">
+                            <div className="invoice-header">
+                                <h2 className="font-['Changa']">حلواني لابوم</h2>
+                                <p>ت 01200016131</p>
+                            </div>
+                            <div className="invoice-details">
+                                <p><strong>التاريخ:</strong> {new Date(orderDate).toLocaleString('ar-EG', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                <p><strong>رقم الطلب:</strong> {orderNumber}</p>
+                                <p><strong>الفرع:</strong> {branchName}</p>
+                                <p><strong>الكاشير:</strong> {cashierName}</p>
+                                <p><strong>الطيار:</strong> {deliveryName}</p>
+                                <p><strong>العميل:</strong> {customerName}</p>
+                                <p><strong>التليفون:</strong> {customerPhone}</p>
+                            </div>
+                            <table className="invoice-items">
+                                <thead>
+                                    <tr>
+                                        <th style="text-align: right;">الصنف</th>
+                                        <th style="text-align: right;">السعر</th>
+                                        <th style="text-align: center;">الكمية</th>
+                                        <th style="text-align: right;">الإجمالي</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {items.filter(item => item.name).map((item, index) => (
+                                        <tr key={index}>
+                                            <td>{item.name}</td>
+                                            <td style="text-align: right;">{Number(item.price).toFixed(2)} ج.م</td>
+                                            <td style="text-align: center;">{item.quantity}</td>
+                                            <td style="text-align: right;">{(Number(item.quantity) * Number(item.price)).toFixed(2)} ج.م</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div className="invoice-totals">
+                                <div><span>الإجمالي الكلي:</span> <span>{total.toFixed(2)} ج.م</span></div>
+                            </div>
+                            <div className="invoice-footer">
+                                <p>شكرًا لك على ثقتك بنا!</p>
+                                <p>تفضل بزيارتنا مرة أخرى.</p>
+                            </div>
+                        </div>
+                        <div class="flex justify-center mt-4">
+                            <button onClick={() => window.location.href = window.location.origin + window.location.pathname} className="bg-red-600 text-white text-sm px-4 py-2 rounded-lg shadow-md hover:bg-red-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 font-['Almarai']">
+                                إنشاء فاتورة جديدة
+                            </button>
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderMainApp = () => {
                 if (currentPage === 'dashboard') {
                     return (
                         <div className="space-y-6">
@@ -592,7 +723,11 @@
                                     طباعة الفاتورة
                                 </button>
                             </div>
-
+                            <div className="flex justify-center mt-4">
+                                <button onClick={handleShareInvoice} className="w-full bg-yellow-500 text-gray-800 py-3 rounded-lg shadow-md hover:bg-yellow-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-400 font-['Almarai']">
+                                    مشاركة الفاتورة (نسخ الرابط)
+                                </button>
+                            </div>
                             {statusMessage.message && (
                                 <div className={`mt-4 text-center py-2 px-4 rounded-lg font-bold font-['Almarai'] ${statusMessage.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                     {statusMessage.message}
@@ -642,22 +777,28 @@
                         <div className="text-center bg-red-800 text-white p-2 mb-6 rounded-lg font-extrabold text-lg shadow-inner font-['Almarai']">
                             برمجة وتصميم مهندس / وائل السيد
                         </div>
-
-                        <div className="flex justify-center gap-4 mb-6">
-                            <button
-                                onClick={() => setCurrentPage('invoice')}
-                                className={`py-2 px-4 rounded-full font-bold transition-colors duration-200 font-['Almarai'] ${currentPage === 'invoice' ? 'bg-red-700 text-white shadow-md' : 'bg-gray-300 text-gray-700 hover:bg-gray-400'}`}
-                            >
-                                الفواتير
-                            </button>
-                            <button
-                                onClick={() => setCurrentPage('dashboard')}
-                                className={`py-2 px-4 rounded-full font-bold transition-colors duration-200 font-['Almarai'] ${currentPage === 'dashboard' ? 'bg-red-700 text-white shadow-md' : 'bg-gray-300 text-gray-700 hover:bg-gray-400'}`}
-                            >
-                                لوحة التحكم
-                            </button>
-                        </div>
-                        {renderContent()}
+                        
+                        {sharedInvoiceId ? (
+                            renderInvoiceView()
+                        ) : (
+                            <>
+                                <div className="flex justify-center gap-4 mb-6">
+                                    <button
+                                        onClick={() => setCurrentPage('invoice')}
+                                        className={`py-2 px-4 rounded-full font-bold transition-colors duration-200 font-['Almarai'] ${currentPage === 'invoice' ? 'bg-red-700 text-white shadow-md' : 'bg-gray-300 text-gray-700 hover:bg-gray-400'}`}
+                                    >
+                                        الفواتير
+                                    </button>
+                                    <button
+                                        onClick={() => setCurrentPage('dashboard')}
+                                        className={`py-2 px-4 rounded-full font-bold transition-colors duration-200 font-['Almarai'] ${currentPage === 'dashboard' ? 'bg-red-700 text-white shadow-md' : 'bg-gray-300 text-gray-700 hover:bg-gray-400'}`}
+                                    >
+                                        لوحة التحكم
+                                    </button>
+                                </div>
+                                {renderMainApp()}
+                            </>
+                        )}
                     </div>
                 </div>
             );
