@@ -1,0 +1,2043 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>برنامج طلبات التوصيل</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&family=Poppins:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Changa:wght@600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <style>
+        /* Custom font and colors for the entire app */
+        :root {
+            --vodafone-red: #e60000;
+            --pomme-d-amour: #AF3737; /* A stylish brownish-red color */
+        }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: var(--vodafone-red); /* Changed to Vodafone Red */
+            color: #000; /* Changed font color to black for better contrast */
+            /* Hide scrollbars */
+            overflow: hidden;
+        }
+
+        /* Adjusted card background and padding for smaller screen */
+        .card-bg {
+            background-color: white;
+            border-radius: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem; /* Reduced padding */
+        }
+        
+        .btn-primary {
+            background-color: var(--pomme-d-amour); /* Changed to Pomme d'amour for contrast */
+            color: white;
+            border-radius: 0.75rem;
+            font-weight: bold;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+        
+        .btn-disabled {
+            background-color: #d1d5db; /* Gray-400 */
+            cursor: not-allowed;
+            color: #6b7280; /* Gray-500 */
+        }
+        .btn-disabled:hover {
+            opacity: 1; /* Prevent hover effect on disabled button */
+        }
+
+        /* Toast notification styles */
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .toast {
+            min-width: 250px;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Poppins', sans-serif;
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            margin-bottom: 10px;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .toast.success { background-color: #4CAF50; color: white; }
+        .toast.error { background-color: #F44336; color: white; }
+        .toast.warning { background-color: #FF9800; color: white; }
+
+        .modal {
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        /* New style to align date input text to the right */
+        input[type="date"] {
+            text-align: right;
+        }
+
+        .logo {
+            height: 40px;
+            width: 40px;
+            object-fit: contain;
+        }
+        
+        /* Smaller input fields */
+        .form-input-small {
+            padding: 0.5rem 0.75rem; /* Reduced padding */
+            font-size: 0.875rem; /* Smaller font size */
+        }
+
+        /* Custom style for the new titles */
+        .title-primary {
+            font-family: 'Cairo', sans-serif;
+            font-size: 1.5rem; /* Reduced font size */
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .title-secondary {
+            font-family: 'Changa', sans-serif; /* Modern, bold Arabic font */
+            font-size: 1rem; /* Reduced font size */
+            font-weight: 600; /* Semi-bold */
+            color: var(--vodafone-red);
+        }
+
+        .l'abome-title {
+            color: var(--pomme-d-amour);
+            font-style: italic;
+        }
+        
+        /* Make the main content container fill the available height and enable internal scrolling */
+        .main-content {
+            height: calc(100vh - 3rem); /* Adjust height to prevent overall scrolling */
+            overflow-y: auto;
+            padding: 1rem;
+        }
+        
+        .modal .card-bg {
+            max-height: 90vh; /* Make modal content fit within the viewport */
+            overflow-y: auto; /* Enable internal scrolling for modal content */
+        }
+
+    </style>
+</head>
+<body class="flex items-center justify-center h-screen p-4">
+
+<div id="login-container" class="fixed inset-0 bg-gray-100 flex flex-col items-center justify-center p-4 z-50">
+    <div class="card-bg w-full max-w-sm text-center">
+        <h1 class="title-primary mb-6">تسجيل الدخول</h1>
+        <form id="login-form" class="space-y-4">
+            <div>
+                <label for="branch-select" class="block text-gray-600 text-sm mb-1 text-right">اختيار الفرع</label>
+                <select id="branch-select" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-right text-black">
+                    </select>
+            </div>
+            <div>
+                <label for="username" class="block text-gray-600 text-sm mb-1 text-right">اسم المستخدم</label>
+                <input type="text" id="username" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-right text-black" required>
+            </div>
+            <div>
+                <label for="password" class="block text-gray-600 text-sm mb-1 text-right">كلمة المرور</label>
+                <input type="password" id="password" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-right text-black" required>
+            </div>
+            <button type="submit" class="w-full py-3 btn-primary">دخول</button>
+        </form>
+    </div>
+</div>
+
+<div id="main-app-container" class="w-full h-full flex items-center justify-center hidden">
+    <div id="main-form-section" class="card-bg w-full max-w-4xl border-4 border-red-600 rounded-3xl main-content">
+        <div class="flex flex-col items-center justify-center mb-4">
+            <h1 class="title-primary text-center">
+                برنامج طلبات التوصيل <span class="l'abome-title">حلواني لابوم</span>
+            </h1>
+            <p class="title-secondary text-center">
+                برمجة وتصميم مهندس / وائل السيد
+            </p>
+            <div id="user-info" class="text-gray-500 text-sm mt-2"></div>
+        </div>
+        
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold mb-2 text-gray-700">بيانات العميل</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label for="phone" class="block text-gray-600 text-sm mb-1">رقم الهاتف</label>
+                    <input type="tel" id="phone" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-black" placeholder="05xxxxxxxx" required>
+                </div>
+                <div>
+                    <label for="name" class="block text-gray-600 text-sm mb-1">اسم العميل</label>
+                    <input type="text" id="name" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-black" placeholder="اسم العميل" required>
+                </div>
+                <div class="md:col-span-2">
+                    <label for="address" class="block text-gray-600 text-sm mb-1">العنوان</label>
+                    <input type="text" id="address" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-black" placeholder="العنوان الكامل" required>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <h2 class="text-lg font-semibold mb-2 text-gray-700">تفاصيل الطلب</h2>
+            <div id="order-items-container" class="space-y-2 mb-3">
+                </div>
+            <button id="add-item-btn" class="w-full py-2 text-xs rounded-md border-2 border-dashed border-gray-400 text-gray-600 hover:bg-gray-100 transition">
+                + إضافة صنف جديد
+            </button>
+            <div class="mt-3">
+                <label for="notes" class="block text-gray-600 text-sm mb-1">ملاحظات</label>
+                <textarea id="notes" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-black" rows="2" placeholder="ملاحظات إضافية..."></textarea>
+            </div>
+        </div>
+
+        <div class="mt-6 pt-3 border-t-2 border-dashed border-gray-300">
+            <div class="flex justify-between items-center mb-1">
+                <span class="text-sm font-bold text-gray-600">الإجمالي الفرعي:</span>
+                <span id="sub-total-price" class="text-lg font-bold text-gray-800">0.00 ج.م</span>
+            </div>
+            <div class="flex justify-between items-center mb-3">
+                <label for="discount" class="text-sm font-bold text-gray-600">نسبة الخصم (%)</label>
+                <input type="number" id="discount" class="w-16 border-2 border-black rounded-md form-input-small bg-gray-100 text-left text-black" value="0" min="0" max="100">
+            </div>
+            <div class="flex justify-between items-center mb-3">
+                <span class="text-lg font-bold text-gray-800">الإجمالي النهائي:</span>
+                <span id="total-price" class="text-xl font-bold text-red-600">0.00 ج.م</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+                <div>
+                    <label for="cashier-name" class="block text-gray-600 text-sm mb-1">اسم الكاشير</label>
+                    <input type="text" id="cashier-name" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-black" placeholder="اسم الكاشير" required>
+                </div>
+                <div>
+                    <label for="driver-name" class="block text-gray-600 text-sm mb-1">اسم الطيار</label>
+                    <input type="text" id="driver-name" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-black" placeholder="اسم الطيار" required>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-2 flex-wrap">
+            <button id="save-btn" class="flex-1 py-2 btn-primary text-sm min-w-[100px]">حفظ الفاتورة</button>
+            <button id="print-btn" class="flex-1 py-2 btn-primary text-sm min-w-[100px] btn-disabled" disabled>طباعة الفاتورة</button>
+            <button id="clear-btn" class="flex-1 py-2 px-3 rounded-md bg-gray-200 text-gray-700 text-sm font-bold hover:bg-gray-300 transition min-w-[100px]">مسح</button>
+            <button id="show-reports-btn" class="flex-1 py-2 px-3 rounded-md bg-gray-200 text-gray-700 text-sm font-bold hover:bg-gray-300 transition min-w-[100px]">التقارير</button>
+            <button id="manage-items-btn" class="flex-1 py-2 px-3 rounded-md bg-gray-200 text-gray-700 text-sm font-bold hover:bg-gray-300 transition min-w-[100px]">إدارة الأصناف</button>
+            <button id="manage-branches-btn" class="flex-1 py-2 px-3 rounded-md bg-gray-200 text-gray-700 text-sm font-bold hover:bg-gray-300 transition min-w-[100px]">إدارة الفروع</button>
+            <button id="manage-users-btn" class="flex-1 py-2 px-3 rounded-md bg-gray-200 text-gray-700 text-sm font-bold hover:bg-gray-300 transition min-w-[100px]">إدارة المستخدمين</button>
+        </div>
+        <div class="mt-3 text-center">
+            <button id="logout-btn" class="text-red-500 hover:underline text-xs">تسجيل خروج</button>
+        </div>
+    </div>
+</div>
+
+<datalist id="item-names-datalist"></datalist>
+
+<div id="reports-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden modal">
+    <div class="bg-white card-bg w-full max-w-2xl">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-bold">تقارير المبيعات</h2>
+            <button id="close-reports-btn" class="text-gray-500 hover:text-gray-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <div class="mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label for="report-start-date" class="block text-gray-600 text-sm mb-1">من تاريخ</label>
+                    <input type="date" id="report-start-date" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-black">
+                </div>
+                <div>
+                    <label for="report-end-date" class="block text-gray-600 text-sm mb-1">إلى تاريخ</label>
+                    <input type="date" id="report-end-date" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-black">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-3 flex-wrap">
+                <button id="generate-report-btn" class="py-2 px-4 btn-primary text-xs">عرض التقرير</button>
+                <button id="export-excel-btn" class="py-2 px-4 rounded-md bg-green-600 text-white font-bold hover:bg-green-700 transition text-xs">تصدير لـ Excel</button>
+                <button id="export-customers-btn" class="py-2 px-4 rounded-md bg-blue-600 text-white font-bold hover:bg-blue-700 transition text-xs">تصدير العملاء</button>
+                <button id="backup-db-btn" class="py-2 px-4 rounded-md bg-purple-600 text-white font-bold hover:bg-purple-700 transition text-xs">
+                    نسخ احتياطي
+                </button>
+                <button id="restore-db-btn" class="py-2 px-4 rounded-md bg-yellow-600 text-white font-bold hover:bg-yellow-700 transition text-xs">
+                    استعادة
+                </button>
+                <input type="file" id="restore-file-input" accept=".json" class="hidden">
+            </div>
+        </div>
+        <div id="report-results" class="mt-6 pt-3 border-t-2 border-dashed border-gray-300">
+            <div class="text-center text-gray-500" id="report-message">
+                <p>اختر فترة زمنية لعرض التقرير.</p>
+            </div>
+            <div id="report-data" class="hidden">
+                <p class="text-sm font-semibold mb-2">إجمالي المبيعات: <span id="total-sales" class="font-bold text-green-600">0.00 ج.م</span></p>
+                <p class="text-sm font-semibold mb-2">عدد الطلبات: <span id="total-orders" class="font-bold">0</span></p>
+                <div id="report-table-container" class="overflow-x-auto mt-4">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    رقم الفاتورة
+                                </th>
+                                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    التاريخ
+                                </th>
+                                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    إجمالي
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="report-body" class="bg-white divide-y divide-gray-200 text-sm">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="manage-items-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden modal">
+    <div class="bg-white card-bg w-full max-w-xl">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-bold">إدارة الأصناف</h2>
+            <button id="close-manage-items-btn" class="text-gray-500 hover:text-gray-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="mb-4">
+            <h3 class="font-semibold mb-2 text-gray-700">إضافة صنف جديد</h3>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label for="item-name-input" class="block text-gray-600 text-sm mb-1">اسم الصنف</label>
+                    <input type="text" id="item-name-input" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-black" placeholder="اسم الصنف">
+                </div>
+                <div>
+                    <label for="item-price-input" class="block text-gray-600 text-sm mb-1">السعر</label>
+                    <input type="number" id="item-price-input" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-black" placeholder="السعر" step="0.01">
+                </div>
+            </div>
+            <button id="add-new-item-btn" class="mt-3 w-full py-2 btn-primary text-sm">إضافة</button>
+        </div>
+
+        <div class="mt-6 border-t-2 border-dashed border-gray-300 pt-3">
+            <h3 class="font-semibold mb-2 text-gray-700">استيراد الأصناف من ملف إكسل</h3>
+            <p class="text-xs text-gray-500 mb-2">
+                يجب أن يحتوي الملف على عمودين: **"اسم الصنف"** و **"السعر"**.
+            </p>
+            <div class="flex gap-2 items-center">
+                <input type="file" id="import-items-file" accept=".csv, .xlsx" class="hidden">
+                <button id="import-items-btn" class="w-full py-2 text-xs rounded-md bg-green-600 text-white font-bold hover:bg-green-700 transition">
+                    استيراد الأصناف من ملف
+                </button>
+                <span id="file-name-span" class="text-xs text-gray-600 truncate flex-1"></span>
+            </div>
+        </div>
+
+        <div>
+            <h3 class="font-semibold mb-2 mt-3 text-gray-700">قائمة الأصناف</h3>
+            <div id="items-list-container" class="space-y-2 max-h-48 overflow-y-auto">
+                </div>
+        </div>
+    </div>
+</div>
+
+<div id="manage-branches-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden modal">
+    <div class="bg-white card-bg w-full max-w-xl">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-bold">إدارة الفروع</h2>
+            <button id="close-manage-branches-btn" class="text-gray-500 hover:text-gray-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="mb-4">
+            <h3 class="font-semibold mb-2 text-gray-700">إضافة فرع جديد</h3>
+            <div class="grid grid-cols-1 gap-3">
+                <div>
+                    <label for="branch-name-input" class="block text-gray-600 text-sm mb-1">اسم الفرع</label>
+                    <input type="text" id="branch-name-input" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-black" placeholder="اسم الفرع">
+                </div>
+            </div>
+            <button id="add-new-branch-btn" class="mt-3 w-full py-2 btn-primary text-sm">إضافة</button>
+        </div>
+
+        <div>
+            <h3 class="font-semibold mb-2 text-gray-700">قائمة الفروع</h3>
+            <div id="branches-list-container" class="space-y-2 max-h-48 overflow-y-auto">
+                </div>
+        </div>
+    </div>
+</div>
+
+<div id="manage-users-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden modal">
+    <div class="bg-white card-bg w-full max-w-xl">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-bold">إدارة المستخدمين</h2>
+            <button id="close-manage-users-btn" class="text-gray-500 hover:text-gray-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="mb-4">
+            <h3 id="user-form-title" class="font-semibold mb-2 text-gray-700">إضافة مستخدم جديد</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label for="user-username-input" class="block text-gray-600 text-sm mb-1">اسم المستخدم</label>
+                    <input type="text" id="user-username-input" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-black" placeholder="اسم المستخدم">
+                </div>
+                <div>
+                    <label for="user-password-input" class="block text-gray-600 text-sm mb-1">كلمة المرور</label>
+                    <input type="password" id="user-password-input" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-black" placeholder="كلمة المرور">
+                </div>
+                <div class="md:col-span-2">
+                    <label for="user-role-select" class="block text-gray-600 text-sm mb-1">الصلاحية</label>
+                    <select id="user-role-select" class="w-full border-2 border-black rounded-md form-input-small bg-gray-100 text-black">
+                        <option value="user">موظف</option>
+                        <option value="admin">مدير</option>
+                    </select>
+                </div>
+            </div>
+            <button id="add-edit-user-btn" class="mt-3 w-full py-2 btn-primary text-sm">إضافة</button>
+        </div>
+
+        <div>
+            <h3 class="font-semibold mb-2 text-gray-700">قائمة المستخدمين</h3>
+            <div id="users-list-container" class="space-y-2 max-h-48 overflow-y-auto">
+                </div>
+        </div>
+    </div>
+</div>
+
+
+<div id="toast-container"></div>
+
+<script>
+    // Constants and DOM elements
+    const DB_NAME = 'DeliveryAppDB';
+    const DB_VERSION = 6; // Incremented DB version for user management
+
+    const STORE_CUSTOMERS = 'customers';
+    const STORE_ORDERS = 'orders';
+    const STORE_ITEMS = 'items';
+    const STORE_USERS = 'users';
+    const STORE_BRANCHES = 'branches'; 
+
+    const phoneInput = document.getElementById('phone');
+    const nameInput = document.getElementById('name');
+    const addressInput = document.getElementById('address');
+    const notesInput = document.getElementById('notes'); // New notes element
+    const orderItemsContainer = document.getElementById('order-items-container');
+    const addItemBtn = document.getElementById('add-item-btn');
+    const subTotalPriceSpan = document.getElementById('sub-total-price');
+    const discountInput = document.getElementById('discount');
+    const totalPriceSpan = document.getElementById('total-price');
+    const cashierNameInput = document.getElementById('cashier-name');
+    const driverNameInput = document.getElementById('driver-name');
+    const saveBtn = document.getElementById('save-btn');
+    const printBtn = document.getElementById('print-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const showReportsBtn = document.getElementById('show-reports-btn');
+    const manageItemsBtn = document.getElementById('manage-items-btn');
+    const manageBranchesBtn = document.getElementById('manage-branches-btn');
+    const manageUsersBtn = document.getElementById('manage-users-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    // Login page elements
+    const loginContainer = document.getElementById('login-container');
+    const mainAppContainer = document.getElementById('main-app-container');
+    const loginForm = document.getElementById('login-form');
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const branchSelect = document.getElementById('branch-select');
+    const userInfoSpan = document.getElementById('user-info');
+    
+    // Reports Modal elements
+    const reportsModal = document.getElementById('reports-modal');
+    const closeReportsBtn = document.getElementById('close-reports-btn');
+    const reportStartDate = document.getElementById('report-start-date');
+    const reportEndDate = document.getElementById('report-end-date');
+    const generateReportBtn = document.getElementById('generate-report-btn');
+    const exportExcelBtn = document.getElementById('export-excel-btn');
+    const exportCustomersBtn = document.getElementById('export-customers-btn');
+    const reportResultsDiv = document.getElementById('report-results');
+    const reportDataDiv = document.getElementById('report-data');
+    const reportMessageDiv = document.getElementById('report-message');
+    const totalSalesSpan = document.getElementById('total-sales');
+    const totalOrdersSpan = document.getElementById('total-orders');
+    const reportBody = document.getElementById('report-body');
+    const backupDbBtn = document.getElementById('backup-db-btn');
+    const restoreDbBtn = document.getElementById('restore-db-btn');
+    const restoreFileInput = document.getElementById('restore-file-input');
+
+    // Manage Items Modal elements
+    const manageItemsModal = document.getElementById('manage-items-modal');
+    const closeManageItemsBtn = document.getElementById('close-manage-items-btn');
+    const itemNameInput = document.getElementById('item-name-input');
+    const itemPriceInput = document.getElementById('item-price-input');
+    const addNewItemBtn = document.getElementById('add-new-item-btn');
+    const itemsListContainer = document.getElementById('items-list-container');
+    const itemNamesDatalist = document.getElementById('item-names-datalist');
+    const importItemsFile = document.getElementById('import-items-file');
+    const importItemsBtn = document.getElementById('import-items-btn');
+    const fileNameSpan = document.getElementById('file-name-span');
+    
+    // Manage Branches Modal elements
+    const manageBranchesModal = document.getElementById('manage-branches-modal');
+    const closeManageBranchesBtn = document.getElementById('close-manage-branches-btn');
+    const branchNameInput = document.getElementById('branch-name-input');
+    const addNewBranchBtn = document.getElementById('add-new-branch-btn');
+    const branchesListContainer = document.getElementById('branches-list-container');
+
+    // Manage Users Modal elements
+    const manageUsersModal = document.getElementById('manage-users-modal');
+    const closeManageUsersBtn = document.getElementById('close-manage-users-btn');
+    const userUsernameInput = document.getElementById('user-username-input');
+    const userPasswordInput = document.getElementById('user-password-input');
+    const userRoleSelect = document.getElementById('user-role-select');
+    const addEditUserBtn = document.getElementById('add-edit-user-btn');
+    const userFormTitle = document.getElementById('user-form-title');
+    const usersListContainer = document.getElementById('users-list-container');
+    
+    let db;
+    let lastSavedOrder = null;
+    let isPrintingEnabled = false;
+    
+    let currentUser = null;
+    let editingUser = null;
+
+    /**
+     * Show a temporary toast notification.
+     * @param {string} message - The message to display.
+     * @param {string} type - 'success', 'error', or 'warning'.
+     */
+    function showToast(message, type) {
+        const toastContainer = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        toastContainer.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.classList.add('show');
+        }, 100);
+
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }, 3000);
+    }
+    
+    /**
+     * Initialize IndexedDB database.
+     */
+    function initDb() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+            request.onupgradeneeded = (event) => {
+                db = event.target.result;
+                if (!db.objectStoreNames.contains(STORE_CUSTOMERS)) {
+                    db.createObjectStore(STORE_CUSTOMERS, { keyPath: 'phone' });
+                }
+                if (!db.objectStoreNames.contains(STORE_ORDERS)) {
+                    const orderStore = db.createObjectStore(STORE_ORDERS, { keyPath: 'invoiceId', autoIncrement: true });
+                    orderStore.createIndex('date', 'date', { unique: false });
+                }
+                if (!db.objectStoreNames.contains(STORE_ITEMS)) {
+                    db.createObjectStore(STORE_ITEMS, { keyPath: 'name' });
+                }
+                if (!db.objectStoreNames.contains(STORE_USERS)) {
+                    db.createObjectStore(STORE_USERS, { keyPath: 'username' });
+                }
+                if (!db.objectStoreNames.contains(STORE_BRANCHES)) {
+                    db.createObjectStore(STORE_BRANCHES, { keyPath: 'name' });
+                }
+            };
+
+            request.onsuccess = (event) => {
+                db = event.target.result;
+                console.log('IndexedDB is ready.');
+                Promise.all([checkDefaultAdminUser(), checkDefaultBranch()]).then(() => {
+                    resolve();
+                }).catch(reject);
+            };
+
+            request.onerror = (event) => {
+                console.error('IndexedDB error:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    /**
+     * Check for a default admin user and create one if it doesn't exist.
+     */
+    function checkDefaultAdminUser() {
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction([STORE_USERS], 'readonly');
+            const store = transaction.objectStore(STORE_USERS);
+            const request = store.get('admin');
+
+            request.onsuccess = (event) => {
+                if (!event.target.result) {
+                    const adminUser = { username: 'admin', password: 'password', role: 'admin' };
+                    const addTransaction = db.transaction([STORE_USERS], 'readwrite');
+                    const addStore = addTransaction.objectStore(STORE_USERS);
+                    const addRequest = addStore.add(adminUser);
+                    addRequest.onsuccess = () => {
+                        console.log('Default admin user created.');
+                        resolve();
+                    };
+                    addRequest.onerror = (e) => {
+                        console.error('Failed to create default admin user:', e.target.error);
+                        reject(e.target.error);
+                    };
+                } else {
+                    console.log('Admin user already exists.');
+                    resolve();
+                }
+            };
+            request.onerror = (e) => {
+                console.error('Error checking for admin user:', e.target.error);
+                reject(e.target.error);
+            };
+        });
+    }
+
+    /**
+     * Check for a default branch and create one if it doesn't exist.
+     */
+    function checkDefaultBranch() {
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction([STORE_BRANCHES], 'readonly');
+            const store = transaction.objectStore(STORE_BRANCHES);
+            const request = store.get('الفرع الرئيسي');
+
+            request.onsuccess = (event) => {
+                if (!event.target.result) {
+                    const defaultBranch = { name: 'الفرع الرئيسي' };
+                    const addTransaction = db.transaction([STORE_BRANCHES], 'readwrite');
+                    const addStore = addTransaction.objectStore(STORE_BRANCHES);
+                    const addRequest = addStore.add(defaultBranch);
+                    addRequest.onsuccess = () => {
+                        console.log('Default branch created.');
+                        resolve();
+                    };
+                    addRequest.onerror = (e) => {
+                        console.error('Failed to create default branch:', e.target.error);
+                        reject(e.target.error);
+                    };
+                } else {
+                    console.log('Default branch already exists.');
+                    resolve();
+                }
+            };
+            request.onerror = (e) => {
+                console.error('Error checking for default branch:', e.target.error);
+                reject(e.target.error);
+            };
+        });
+    }
+    
+    /**
+     * Load all branches from the database and populate the select element.
+     */
+    function loadBranches() {
+        if (!db) return;
+        const transaction = db.transaction([STORE_BRANCHES], 'readonly');
+        const store = transaction.objectStore(STORE_BRANCHES);
+        const request = store.getAll();
+
+        request.onsuccess = (event) => {
+            const branches = event.target.result;
+            populateBranchesSelect(branches);
+            populateBranchesList(branches);
+        };
+        request.onerror = (event) => console.error('Error loading branches:', event.target.error);
+    }
+
+    /**
+     * Populate the select element on the login page.
+     * @param {Array<object>} branches - Array of branch objects.
+     */
+    function populateBranchesSelect(branches) {
+        branchSelect.innerHTML = '';
+        branches.forEach(branch => {
+            const option = document.createElement('option');
+            option.value = branch.name;
+            option.textContent = branch.name;
+            branchSelect.appendChild(option);
+        });
+    }
+
+    /**
+     * Populate the list in the manage branches modal.
+     * @param {Array<object>} branches - Array of branch objects.
+     */
+    function populateBranchesList(branches) {
+        branchesListContainer.innerHTML = '';
+        if (branches.length === 0) {
+            branchesListContainer.innerHTML = '<p class="text-gray-500 text-center">لا توجد فروع حالياً.</p>';
+            return;
+        }
+
+        branches.forEach(branch => {
+            const branchElement = document.createElement('div');
+            branchElement.className = 'flex justify-between items-center py-2 px-3 bg-gray-100 rounded-md';
+            branchElement.innerHTML = `
+                <div class="flex-1">
+                    <span class="font-semibold">${branch.name}</span>
+                </div>
+                <div>
+                    <button class="text-red-500 hover:text-red-700 delete-branch-btn" data-branch-name="${branch.name}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            `;
+            branchesListContainer.appendChild(branchElement);
+        });
+
+        branchesListContainer.querySelectorAll('.delete-branch-btn').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const branchName = e.currentTarget.dataset.branchName;
+                if (confirm(`هل أنت متأكد من حذف الفرع "${branchName}"؟`)) {
+                    try {
+                        await deleteBranch(branchName);
+                        showToast('تم حذف الفرع بنجاح.', 'success');
+                        loadBranches();
+                    } catch (error) {
+                        showToast('فشل في حذف الفرع.', 'error');
+                        console.error(error);
+                    }
+                }
+            });
+        });
+    }
+
+    /**
+     * Save a new branch to the database.
+     * @param {string} name - The branch name.
+     * @returns {Promise} A promise that resolves when the branch is saved.
+     */
+    function saveBranch(name) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                reject('Database not initialized.');
+                return;
+            }
+            const transaction = db.transaction([STORE_BRANCHES], 'readwrite');
+            const store = transaction.objectStore(STORE_BRANCHES);
+            const branch = { name: name.trim() };
+            const request = store.add(branch);
+            request.onsuccess = () => resolve();
+            request.onerror = (event) => reject(event.target.error);
+        });
+    }
+
+    /**
+     * Delete a branch from the database.
+     * @param {string} name - The name of the branch to delete.
+     * @returns {Promise} A promise that resolves when the branch is deleted.
+     */
+    function deleteBranch(name) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                reject('Database not initialized.');
+                return;
+            }
+            const transaction = db.transaction([STORE_BRANCHES], 'readwrite');
+            const store = transaction.objectStore(STORE_BRANCHES);
+            const request = store.delete(name);
+            request.onsuccess = () => resolve();
+            request.onerror = (event) => reject(event.target.error);
+        });
+    }
+
+    /**
+     * Handle user login.
+     */
+    async function loginUser(username, password) {
+        if (!db) {
+            showToast('خطأ: قاعدة البيانات غير جاهزة.', 'error');
+            return false;
+        }
+
+        const transaction = db.transaction([STORE_USERS], 'readonly');
+        const store = transaction.objectStore(STORE_USERS);
+        const request = store.get(username);
+
+        return new Promise((resolve) => {
+            request.onsuccess = (event) => {
+                const user = event.target.result;
+                if (user && user.password === password) {
+                    currentUser = user;
+                    sessionStorage.setItem('currentUser', JSON.stringify(user));
+                    sessionStorage.setItem('currentBranch', branchSelect.value);
+                    showToast(`مرحباً بك، ${user.username}!`, 'success');
+                    resolve(true);
+                } else {
+                    showToast('اسم المستخدم أو كلمة المرور غير صحيحة.', 'error');
+                    resolve(false);
+                }
+            };
+            request.onerror = () => {
+                showToast('فشل تسجيل الدخول. يرجى المحاولة مرة أخرى.', 'error');
+                resolve(false);
+            };
+        });
+    }
+
+    /**
+     * Update UI based on user role.
+     */
+    function updateUIForUserRole() {
+        if (!currentUser) return;
+
+        userInfoSpan.textContent = `مرحباً، ${currentUser.username} (${currentUser.role === 'admin' ? 'مدير' : 'موظف'}) - الفرع: ${sessionStorage.getItem('currentBranch')}`;
+
+        const isAdmin = currentUser.role === 'admin';
+        showReportsBtn.style.display = isAdmin ? 'inline-block' : 'none';
+        manageItemsBtn.style.display = isAdmin ? 'inline-block' : 'none';
+        manageBranchesBtn.style.display = isAdmin ? 'inline-block' : 'none';
+        manageUsersBtn.style.display = isAdmin ? 'inline-block' : 'none';
+
+        reportsModal.classList.add('hidden');
+        manageItemsModal.classList.add('hidden');
+        manageBranchesModal.classList.add('hidden');
+        manageUsersModal.classList.add('hidden');
+    }
+
+    /**
+     * Logout the current user.
+     */
+    function logoutUser() {
+        currentUser = null;
+        sessionStorage.removeItem('currentUser');
+        sessionStorage.removeItem('currentBranch');
+        loginContainer.classList.remove('hidden');
+        mainAppContainer.classList.add('hidden');
+        showToast('تم تسجيل الخروج بنجاح.', 'success');
+        loadBranches();
+    }
+
+    /**
+     * Search for a customer by phone number and populate the form.
+     * @param {string} phone - The phone number to search for.
+     */
+    function searchCustomer(phone) {
+        if (!db) {
+            showToast('خطأ: قاعدة البيانات غير جاهزة.', 'error');
+            return;
+        }
+
+        const transaction = db.transaction([STORE_CUSTOMERS], 'readonly');
+        const store = transaction.objectStore(STORE_CUSTOMERS);
+        const request = store.get(phone);
+
+        request.onsuccess = (event) => {
+            const customer = event.target.result;
+            if (customer) {
+                nameInput.value = customer.name;
+                addressInput.value = customer.address;
+                showToast('تم تحميل بيانات العميل.', 'success');
+            } else {
+                nameInput.value = '';
+                addressInput.value = '';
+            }
+        };
+
+        request.onerror = (event) => {
+            console.error('Error searching customer:', event.target.error);
+            showToast('خطأ في البحث عن العميل.', 'error');
+        };
+    }
+
+    /**
+     * Save a new or update an existing customer.
+     * @param {object} customer - The customer object.
+     */
+    function saveCustomer(customer) {
+        if (!db) return;
+        const transaction = db.transaction([STORE_CUSTOMERS], 'readwrite');
+        const store = transaction.objectStore(STORE_CUSTOMERS);
+        const request = store.put(customer);
+        request.onsuccess = () => console.log('Customer saved successfully.');
+        request.onerror = (event) => console.error('Error saving customer:', event.target.error);
+    }
+
+    /**
+     * Save a new order to the database.
+     * @param {object} order - The order object.
+     * @returns {Promise<number>} A promise that resolves with the invoice ID.
+     */
+    function saveOrder(order) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                reject('Database not initialized.');
+                return;
+            }
+            const transaction = db.transaction([STORE_ORDERS], 'readwrite');
+            const store = transaction.objectStore(STORE_ORDERS);
+            const request = store.add(order);
+            request.onsuccess = (event) => {
+                console.log('Order saved successfully.');
+                resolve(event.target.result);
+            };
+            request.onerror = (event) => {
+                console.error('Error saving order:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+    
+    /**
+     * Save a new or update an existing item to the database.
+     * @param {string} name - The item name.
+     * @param {number} price - The item price.
+     * @returns {Promise} A promise that resolves when the item is saved.
+     */
+    function saveItem(name, price) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                reject('Database not initialized.');
+                return;
+            }
+            const transaction = db.transaction([STORE_ITEMS], 'readwrite');
+            const store = transaction.objectStore(STORE_ITEMS);
+            const item = { name: name.trim(), price: parseFloat(price) };
+            const request = store.put(item);
+            request.onsuccess = () => resolve();
+            request.onerror = (event) => reject(event.target.error);
+        });
+    }
+
+    /**
+     * Delete an item from the database.
+     * @param {string} name - The name of the item to delete.
+     * @returns {Promise} A promise that resolves when the item is deleted.
+     */
+    function deleteItem(name) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                reject('Database not initialized.');
+                return;
+            }
+            const transaction = db.transaction([STORE_ITEMS], 'readwrite');
+            const store = transaction.objectStore(STORE_ITEMS);
+            const request = store.delete(name);
+            request.onsuccess = () => resolve();
+            request.onerror = (event) => reject(event.target.error);
+        });
+    }
+
+    /**
+     * Load all items from the database and populate the datalist and list.
+     */
+    async function loadItems() {
+        if (!db) return;
+        const transaction = db.transaction([STORE_ITEMS], 'readonly');
+        const store = transaction.objectStore(STORE_ITEMS);
+        const request = store.getAll();
+
+        request.onsuccess = (event) => {
+            const items = event.target.result;
+            populateItemsDatalist(items);
+            populateItemsList(items);
+        };
+        request.onerror = (event) => console.error('Error loading items:', event.target.error);
+    }
+
+    /**
+     * Populate the datalist for item names.
+     * @param {Array<object>} items - Array of item objects.
+     */
+    function populateItemsDatalist(items) {
+        itemNamesDatalist.innerHTML = '';
+        items.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item.name;
+            itemNamesDatalist.appendChild(option);
+        });
+    }
+    
+    /**
+     * Populate the list in the manage items modal.
+     * @param {Array<object>} items - Array of item objects.
+     */
+    function populateItemsList(items) {
+        itemsListContainer.innerHTML = '';
+        if (items.length === 0) {
+            itemsListContainer.innerHTML = '<p class="text-gray-500 text-center">لا توجد أصناف حالياً.</p>';
+            return;
+        }
+
+        items.forEach(item => {
+            const itemElement = document.createElement('div');
+            itemElement.className = 'flex justify-between items-center py-2 px-3 bg-gray-100 rounded-md';
+            itemElement.innerHTML = `
+                <div class="flex-1">
+                    <span class="font-semibold">${item.name}</span>
+                    <span class="text-sm text-gray-600 mr-2">${item.price.toFixed(2)} ج.م</span>
+                </div>
+                <div>
+                    <button class="text-red-500 hover:text-red-700 delete-item-btn" data-item-name="${item.name}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            `;
+            itemsListContainer.appendChild(itemElement);
+        });
+
+        itemsListContainer.querySelectorAll('.delete-item-btn').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const itemName = e.currentTarget.dataset.itemName;
+                if (confirm(`هل أنت متأكد من حذف الصنف "${itemName}"؟`)) {
+                    try {
+                        await deleteItem(itemName);
+                        showToast('تم حذف الصنف بنجاح.', 'success');
+                        loadItems();
+                    } catch (error) {
+                        showToast('فشل في حذف الصنف.', 'error');
+                        console.error(error);
+                    }
+                }
+            });
+        });
+    }
+
+    /**
+     * Imports items from an Excel file (CSV or XLSX) into the database.
+     * @param {File} file - The file to import.
+     */
+    function importItemsFromExcel(file) {
+        const reader = new FileReader();
+
+        reader.onload = async (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const json = XLSX.utils.sheet_to_json(worksheet);
+
+                if (!json || json.length === 0) {
+                    showToast('الملف فارغ أو لا يحتوي على بيانات.', 'warning');
+                    return;
+                }
+
+                const itemsToAdd = json.map(row => {
+                    const itemName = row['اسم الصنف'] || row['Item Name'];
+                    const itemPrice = row['السعر'] || row['Price'];
+                    return { name: itemName, price: parseFloat(itemPrice) };
+                });
+
+                const transaction = db.transaction([STORE_ITEMS], 'readwrite');
+                const store = transaction.objectStore(STORE_ITEMS);
+
+                let successfulImports = 0;
+                let failedImports = 0;
+
+                for (const item of itemsToAdd) {
+                    if (item.name && !isNaN(item.price) && item.price > 0) {
+                        try {
+                            await new Promise((resolve, reject) => {
+                                const request = store.put(item);
+                                request.onsuccess = () => resolve();
+                                request.onerror = () => reject();
+                            });
+                            successfulImports++;
+                        } catch (error) {
+                            failedImports++;
+                            console.error('Failed to add item:', item.name, error);
+                        }
+                    } else {
+                        failedImports++;
+                    }
+                }
+
+                transaction.oncomplete = () => {
+                    showToast(`تم استيراد ${successfulImports} صنف بنجاح. فشل: ${failedImports}.`, 'success');
+                    loadItems(); // Refresh the list
+                };
+
+                transaction.onerror = (e) => {
+                    showToast('فشل في استيراد الأصناف.', 'error');
+                    console.error(e.target.error);
+                };
+
+            } catch (error) {
+                showToast('حدث خطأ أثناء قراءة الملف. تأكد من أنه ملف إكسل صالح.', 'error');
+                console.error('File read error:', error);
+            }
+        };
+
+        reader.onerror = (e) => {
+            showToast('فشل في قراءة الملف.', 'error');
+            console.error('FileReader error:', e);
+        };
+
+        reader.readAsArrayBuffer(file);
+    }
+
+    /**
+     * Dynamically add a new item row to the order form.
+     */
+    function addItem() {
+        const itemRow = document.createElement('div');
+        itemRow.className = 'grid grid-cols-4 md:grid-cols-5 gap-2 item-row';
+        itemRow.innerHTML = `
+            <div class="col-span-4 md:col-span-2">
+                <input type="text" list="item-names-datalist" class="w-full border-2 border-black rounded-md form-input-small item-name bg-gray-100 text-black" placeholder="اسم الصنف">
+            </div>
+            <div>
+                <input type="number" class="w-full border-2 border-black rounded-md form-input-small item-qty bg-gray-100 text-black" placeholder="الكمية" value="1" min="1">
+            </div>
+            <div class="flex items-center gap-1">
+                <input type="number" class="w-full border-2 border-black rounded-md form-input-small item-price bg-gray-100 text-black" placeholder="السعر" step="0.01">
+                <span class="font-bold item-total-display text-sm whitespace-nowrap">0.00</span>
+            </div>
+            <div class="flex items-center justify-end">
+                <button type="button" class="text-red-500 hover:text-red-700 ml-2 remove-item-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+            </div>
+        `;
+        orderItemsContainer.appendChild(itemRow);
+        
+        const nameInput = itemRow.querySelector('.item-name');
+        const qtyInput = itemRow.querySelector('.item-qty');
+        const priceInput = itemRow.querySelector('.item-price');
+        const removeBtn = itemRow.querySelector('.remove-item-btn');
+        const itemTotalDisplay = itemRow.querySelector('.item-total-display');
+
+        const updateItemTotal = () => {
+            const qty = parseFloat(qtyInput.value) || 0;
+            const price = parseFloat(priceInput.value) || 0;
+            const total = qty * price;
+            itemTotalDisplay.textContent = total.toFixed(2);
+            calculateTotalPrice();
+        };
+
+        const updateItemPrice = async () => {
+            const itemName = nameInput.value.trim();
+            if (itemName) {
+                const transaction = db.transaction([STORE_ITEMS], 'readonly');
+                const store = transaction.objectStore(STORE_ITEMS);
+                const request = store.get(itemName);
+                request.onsuccess = (event) => {
+                    const item = event.target.result;
+                    if (item) {
+                        priceInput.value = item.price;
+                    }
+                    updateItemTotal();
+                };
+            }
+        };
+
+        nameInput.addEventListener('change', updateItemPrice);
+        qtyInput.addEventListener('input', updateItemTotal);
+        priceInput.addEventListener('input', updateItemTotal);
+        removeBtn.addEventListener('click', () => {
+            itemRow.remove();
+            calculateTotalPrice();
+        });
+
+        updateItemTotal();
+    }
+
+    /**
+     * Calculate the total price of all order items with discount.
+     */
+    function calculateTotalPrice() {
+        let subtotal = 0;
+        const itemRows = orderItemsContainer.querySelectorAll('.item-row');
+        itemRows.forEach(row => {
+            const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+            const price = parseFloat(row.querySelector('.item-price').value) || 0;
+            subtotal += qty * price;
+        });
+
+        const discountPercentage = parseFloat(discountInput.value) || 0;
+        const discountAmount = subtotal * (discountPercentage / 100);
+        const finalTotal = subtotal - discountAmount;
+
+        subTotalPriceSpan.textContent = `${subtotal.toFixed(2)} ج.م`;
+        totalPriceSpan.textContent = `${finalTotal.toFixed(2)} ج.م`;
+    }
+
+    /**
+     * Generate and print the invoice in a hidden iframe.
+     * @param {number} invoiceId - The unique invoice ID.
+     * @param {object} order - The order data.
+     */
+    function printInvoice(invoiceId, order) {
+        if (!order || !invoiceId) {
+            showToast('لا توجد فاتورة للطباعة. يرجى حفظ الفاتورة أولاً.', 'warning');
+            return;
+        }
+        
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.srcdoc = getInvoiceHtml(invoiceId, order);
+
+        iframe.onload = () => {
+            const iframeWindow = iframe.contentWindow;
+            iframeWindow.print();
+            setTimeout(() => {
+                document.body.removeChild(iframe);
+            }, 1000);
+        };
+        
+        document.body.appendChild(iframe);
+    }
+
+    /**
+     * Create the HTML content for the invoice.
+     * @param {number} invoiceId - The invoice ID.
+     * @param {object} order - The order data.
+     * @returns {string} - The complete HTML string.
+     */
+    function getInvoiceHtml(invoiceId, order) {
+        const date = new Date(order.date);
+        const formattedDate = date.toLocaleDateString('ar-EG', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: 'numeric',
+            hour12: true,
+        });
+        
+        const branchName = sessionStorage.getItem('currentBranch') || 'حلواني لابوم';
+        const notes = order.notes ? `<p><strong>ملاحظات:</strong> ${order.notes}</p>` : '';
+
+        let itemsHtml = order.items.map(item => `
+            <tr>
+                <td>${item.name}</td>
+                <td>${item.qty}</td>
+                <td>${item.price.toFixed(2)}</td>
+                <td>${item.total.toFixed(2)}</td>
+            </tr>
+        `).join('');
+
+        return `
+            <!DOCTYPE html>
+            <html lang="ar" dir="rtl">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>فاتورة رقم ${invoiceId}</title>
+                <style>
+                    body {
+                        font-family: 'Courier New', monospace;
+                        font-size: 14px;
+                        color: black;
+                        line-height: 1.2;
+                        width: 300px;
+                        margin: 0;
+                        padding: 0;
+                    }
+                    .invoice-header {
+                        text-align: center;
+                        border-bottom: 2px dashed black;
+                        padding-bottom: 10px;
+                        margin-bottom: 10px;
+                    }
+                    .invoice-details p {
+                        font-size: 12px;
+                        margin-bottom: 4px;
+                    }
+                    .invoice-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-top: 10px;
+                        text-align: right;
+                    }
+                    .invoice-table th, .invoice-table td {
+                        padding: 4px 0;
+                    }
+                    .invoice-table th {
+                        border-bottom: 1px solid black;
+                        font-weight: bold;
+                        text-align: right;
+                    }
+                    .invoice-total {
+                        border-top: 2px dashed black;
+                        font-size: 16px;
+                        font-weight: bold;
+                        text-align: center;
+                        padding-top: 10px;
+                        margin-top: 10px;
+                    }
+                    .invoice-footer {
+                        text-align: center;
+                        margin-top: 10px;
+                    }
+                    @page {
+                        size: auto;
+                        margin: 0;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="printable-invoice">
+                    <div class="invoice-header">
+                        <h2 style="font-size:1.1em; margin:0;">حلواني لابوم 01200016131</h2>
+                        <h1 style="font-size: 1.2em; font-weight: bold; margin-top: 0.5em;">${branchName}</h1>
+                        <p style="font-size: 0.9em;">فاتورة مبيعات</p>
+                        <p style="font-size: 0.9em;">رقم الفاتورة: ${invoiceId}</p>
+                        <p style="font-size: 0.9em;">التاريخ: ${formattedDate}</p>
+                    </div>
+                    <div class="invoice-details">
+                        <p><strong>العميل:</strong> ${order.customer.name}</p>
+                        <p><strong>رقم الهاتف:</strong> ${order.customer.phone}</p>
+                        <p><strong>العنوان:</strong> ${order.customer.address}</p>
+                        ${notes}
+                    </div>
+                    <table class="invoice-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 40%;">الصنف</th>
+                                <th style="width: 15%;">الكمية</th>
+                                <th style="width: 25%;">السعر</th>
+                                <th style="width: 20%;">الإجمالي</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${itemsHtml}
+                        </tbody>
+                    </table>
+                    <div class="invoice-total">
+                        <p><strong>الإجمالي الفرعي:</strong> ${order.subtotal.toFixed(2)} ج.م</p>
+                        <p><strong>الخصم:</strong> ${order.discountPercentage}% (-${order.discount.toFixed(2)} ج.م)</p>
+                        <p><strong>الإجمالي النهائي:</strong> ${order.total.toFixed(2)} ج.م</p>
+                    </div>
+                    <div class="invoice-footer">
+                        <p>الكاشير: ${order.cashier}</p>
+                        <p>الطيار: ${order.driver}</p>
+                        <p>شكراً لزيارتكم!</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
+    }
+    
+    function clearForm() {
+        phoneInput.value = '';
+        nameInput.value = '';
+        addressInput.value = '';
+        notesInput.value = ''; // Clear notes field
+        cashierNameInput.value = '';
+        driverNameInput.value = '';
+        discountInput.value = '0';
+        orderItemsContainer.innerHTML = '';
+        lastSavedOrder = null;
+        isPrintingEnabled = false;
+        togglePrintButtonState();
+        addItem();
+        calculateTotalPrice();
+    }
+    
+    async function generateReport() {
+        if (!db) return;
+        
+        const startDate = new Date(reportStartDate.value);
+        const endDate = new Date(reportEndDate.value);
+        endDate.setHours(23, 59, 59, 999);
+
+        const transaction = db.transaction([STORE_ORDERS], 'readonly');
+        const store = transaction.objectStore(STORE_ORDERS);
+        const index = store.index('date');
+
+        let totalSales = 0;
+        let totalOrders = 0;
+        let orders = [];
+
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            reportMessageDiv.textContent = 'الرجاء اختيار تواريخ صحيحة.';
+            reportMessageDiv.classList.remove('hidden');
+            reportDataDiv.classList.add('hidden');
+            return;
+        }
+
+        try {
+            const range = IDBKeyRange.bound(startDate.getTime(), endDate.getTime());
+            const request = index.openCursor(range);
+
+            request.onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    const order = cursor.value;
+                    totalSales += order.total;
+                    totalOrders++;
+                    orders.push(order);
+                    cursor.continue();
+                } else {
+                    totalSalesSpan.textContent = `${totalSales.toFixed(2)} ج.م`;
+                    totalOrdersSpan.textContent = totalOrders;
+                    
+                    reportBody.innerHTML = '';
+                    if (orders.length > 0) {
+                        orders.forEach(order => {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td class="px-3 py-2 whitespace-nowrap">${order.invoiceId}</td>
+                                <td class="px-3 py-2 whitespace-nowrap">${new Date(order.date).toLocaleDateString('ar-EG')}</td>
+                                <td class="px-3 py-2 whitespace-nowrap">${order.total.toFixed(2)} ج.م</td>
+                            `;
+                            reportBody.appendChild(row);
+                        });
+                        reportMessageDiv.classList.add('hidden');
+                        reportDataDiv.classList.remove('hidden');
+                    } else {
+                        reportMessageDiv.textContent = 'لا توجد بيانات لهذه الفترة.';
+                        reportMessageDiv.classList.remove('hidden');
+                        reportDataDiv.classList.add('hidden');
+                    }
+                }
+            };
+            request.onerror = (event) => {
+                showToast('خطأ في توليد التقرير.', 'error');
+                console.error('Error generating report:', event.target.error);
+            };
+        } catch (e) {
+            console.error('Error in IndexedDB transaction:', e);
+            showToast('حدث خطأ أثناء إنشاء التقرير.', 'error');
+        }
+    }
+
+    function exportToExcel() {
+        if (!db) return;
+        const startDate = new Date(reportStartDate.value);
+        const endDate = new Date(reportEndDate.value);
+        endDate.setHours(23, 59, 59, 999);
+
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            showToast('الرجاء تحديد تاريخ بدء وانتهاء صالحين أولاً.', 'warning');
+            return;
+        }
+
+        const transaction = db.transaction([STORE_ORDERS], 'readonly');
+        const store = transaction.objectStore(STORE_ORDERS);
+        const index = store.index('date');
+
+        const header = ["Invoice ID", "Date", "Customer Name", "Phone", "Address", "Notes", "Subtotal", "Discount Percentage", "Discount Amount", "Total", "Cashier", "Driver", "Items"];
+        const csvRows = [header.join(';')];
+        const range = IDBKeyRange.bound(startDate.getTime(), endDate.getTime());
+
+        const request = index.openCursor(range);
+        request.onsuccess = (event) => {
+            const cursor = event.target.result;
+            if (cursor) {
+                const order = cursor.value;
+                const date = new Date(order.date).toLocaleDateString();
+                const items = order.items.map(item => `${item.name} (${item.qty} x ${item.price})`).join('; ');
+                const row = [
+                    order.invoiceId,
+                    `"${date}"`,
+                    `"${order.customer.name}"`,
+                    `"${order.customer.phone}"`,
+                    `"${order.customer.address}"`,
+                    `"${order.notes || ''}"`,
+                    order.subtotal.toFixed(2),
+                    (order.discountPercentage || 0).toFixed(2),
+                    order.discount.toFixed(2),
+                    order.total.toFixed(2),
+                    `"${order.cashier}"`,
+                    `"${order.driver}"`,
+                    `"${items}"`
+                ];
+                csvRows.push(row.join(';'));
+                cursor.continue();
+            } else {
+                const csvString = '\ufeff' + csvRows.join('\n');
+                const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `orders_report_${startDate.toISOString().split('T')[0]}_to_${endDate.toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showToast('تم تصدير التقرير بنجاح!', 'success');
+            }
+        };
+
+        request.onerror = (event) => {
+            showToast('فشل في تصدير التقرير.', 'error');
+            console.error('Error exporting report:', event.target.error);
+        };
+    }
+
+    function exportCustomers() {
+        if (!db) return;
+
+        const transaction = db.transaction([STORE_CUSTOMERS], 'readonly');
+        const store = transaction.objectStore(STORE_CUSTOMERS);
+
+        const header = ["Phone", "Name", "Address"];
+        const csvRows = [header.join(';')];
+
+        const request = store.openCursor();
+        request.onsuccess = (event) => {
+            const cursor = event.target.result;
+            if (cursor) {
+                const customer = cursor.value;
+                const row = [
+                    `"${customer.phone}"`,
+                    `"${customer.name}"`,
+                    `"${customer.address}"`
+                ];
+                csvRows.push(row.join(';'));
+                cursor.continue();
+            } else {
+                const csvString = '\ufeff' + csvRows.join('\n');
+                const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `customers_list_${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showToast('تم تصدير بيانات العملاء بنجاح!', 'success');
+            }
+        };
+
+        request.onerror = (event) => {
+            showToast('فشل في تصدير العملاء.', 'error');
+            console.error('Error exporting customers:', event.target.error);
+        };
+    }
+    
+    /**
+     * Backs up all data from IndexedDB stores into a JSON file.
+     */
+    async function backupDatabase() {
+        if (!db) {
+            showToast('خطأ: قاعدة البيانات غير جاهزة.', 'error');
+            return;
+        }
+
+        const storesToBackup = [
+            STORE_CUSTOMERS,
+            STORE_ORDERS,
+            STORE_ITEMS,
+            STORE_USERS,
+            STORE_BRANCHES
+        ];
+
+        const backupData = {};
+        const transaction = db.transaction(storesToBackup, 'readonly');
+
+        try {
+            for (const storeName of storesToBackup) {
+                const store = transaction.objectStore(storeName);
+                const records = await new Promise((resolve, reject) => {
+                    const request = store.getAll();
+                    request.onsuccess = (event) => resolve(event.target.result);
+                    request.onerror = (event) => reject(event.target.error);
+                });
+                backupData[storeName] = records;
+            }
+
+            const jsonData = JSON.stringify(backupData, null, 2);
+            const blob = new Blob([jsonData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `app_backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            showToast('تم النسخ الاحتياطي لقاعدة البيانات بنجاح!', 'success');
+        } catch (error) {
+            showToast('فشل النسخ الاحتياطي لقاعدة البيانات.', 'error');
+            console.error('Backup failed:', error);
+        }
+    }
+
+    /**
+     * Restores data from a JSON file to IndexedDB stores.
+     * @param {File} file - The JSON file to restore from.
+     */
+    async function restoreDatabase(file) {
+        if (!db) {
+            showToast('خطأ: قاعدة البيانات غير جاهزة.', 'error');
+            return;
+        }
+
+        if (!confirm('سيؤدي هذا إلى مسح جميع البيانات الحالية واستعادتها من الملف. هل أنت متأكد؟')) {
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const backupData = JSON.parse(event.target.result);
+                const storesToRestore = Object.keys(backupData);
+
+                const transaction = db.transaction(storesToRestore, 'readwrite');
+
+                // Clear existing data before restoring
+                for (const storeName of storesToRestore) {
+                    const store = transaction.objectStore(storeName);
+                    await new Promise((resolve, reject) => {
+                        const clearRequest = store.clear();
+                        clearRequest.onsuccess = () => resolve();
+                        clearRequest.onerror = (e) => reject(e);
+                    });
+                }
+                
+                // Add new data
+                for (const storeName of storesToRestore) {
+                    const store = transaction.objectStore(storeName);
+                    for (const record of backupData[storeName]) {
+                        await new Promise((resolve, reject) => {
+                            const addRequest = store.add(record);
+                            addRequest.onsuccess = () => resolve();
+                            addRequest.onerror = (event) => {
+                                console.error(`Failed to add record to ${storeName}:`, record, event.target.error);
+                                reject(event.target.error);
+                            };
+                        });
+                    }
+                }
+
+                transaction.oncomplete = () => {
+                    showToast('تمت استعادة قاعدة البيانات بنجاح!', 'success');
+                    // Refresh UI or reload page to reflect changes
+                    location.reload(); 
+                };
+
+                transaction.onerror = (event) => {
+                    showToast('فشل استعادة قاعدة البيانات.', 'error');
+                    console.error('Restore transaction failed:', event.target.error);
+                };
+
+            } catch (error) {
+                showToast('الملف غير صالح أو تالف.', 'error');
+                console.error('Restore failed:', error);
+            }
+        };
+        reader.readAsText(file);
+    }
+    
+    function togglePrintButtonState() {
+        if (isPrintingEnabled) {
+            printBtn.classList.remove('btn-disabled');
+            printBtn.removeAttribute('disabled');
+        } else {
+            printBtn.classList.add('btn-disabled');
+            printBtn.setAttribute('disabled', 'true');
+        }
+    }
+
+    // New user management functions
+    function resetUserForm() {
+        userUsernameInput.value = '';
+        userPasswordInput.value = '';
+        userRoleSelect.value = 'user';
+        addEditUserBtn.textContent = 'إضافة';
+        userFormTitle.textContent = 'إضافة مستخدم جديد';
+        userUsernameInput.disabled = false;
+        editingUser = null;
+    }
+
+    function loadUsers() {
+        if (!db) return;
+        const transaction = db.transaction([STORE_USERS], 'readonly');
+        const store = transaction.objectStore(STORE_USERS);
+        const request = store.getAll();
+
+        request.onsuccess = (event) => {
+            const users = event.target.result;
+            populateUsersList(users);
+        };
+    }
+
+    function populateUsersList(users) {
+        usersListContainer.innerHTML = '';
+        if (users.length === 0) {
+            usersListContainer.innerHTML = '<p class="text-gray-500 text-center">لا يوجد مستخدمون حالياً.</p>';
+            return;
+        }
+        
+        users.forEach(user => {
+            const userElement = document.createElement('div');
+            userElement.className = 'flex justify-between items-center py-2 px-3 bg-gray-100 rounded-md';
+            userElement.innerHTML = `
+                <div class="flex-1">
+                    <span class="font-semibold">${user.username}</span>
+                    <span class="text-sm text-gray-600 mr-2">(${user.role === 'admin' ? 'مدير' : 'موظف'})</span>
+                </div>
+                <div class="space-x-2">
+                    <button class="text-blue-500 hover:text-blue-700 edit-user-btn" data-username="${user.username}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zm-1.823 1.823l1.54 1.54-6.44 6.44a.5.5 0 00-.14.287l-.093.465a.5.5 0 01-.527.465l-.465.093a.5.5 0 00-.287.14L3.6 14.4V16h1.6l4.63-4.63a.5.5 0 00.14-.287z" />
+                        </svg>
+                    </button>
+                    <button class="text-red-500 hover:text-red-700 delete-user-btn" data-username="${user.username}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            `;
+            usersListContainer.appendChild(userElement);
+        });
+        
+        usersListContainer.querySelectorAll('.edit-user-btn').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const username = e.currentTarget.dataset.username;
+                const transaction = db.transaction([STORE_USERS], 'readonly');
+                const store = transaction.objectStore(STORE_USERS);
+                const request = store.get(username);
+                request.onsuccess = (event) => {
+                    const user = event.target.result;
+                    if (user) {
+                        editingUser = user;
+                        userUsernameInput.value = user.username;
+                        userPasswordInput.value = ''; // Don't show password
+                        userRoleSelect.value = user.role;
+                        userFormTitle.textContent = `تعديل المستخدم: ${user.username}`;
+                        addEditUserBtn.textContent = 'حفظ التعديلات';
+                        userUsernameInput.disabled = true;
+                    }
+                };
+            });
+        });
+
+        usersListContainer.querySelectorAll('.delete-user-btn').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const username = e.currentTarget.dataset.username;
+                if (username === currentUser.username) {
+                    showToast('لا يمكن حذف المستخدم النشط.', 'error');
+                    return;
+                }
+                if (confirm(`هل أنت متأكد من حذف المستخدم "${username}"؟`)) {
+                    const transaction = db.transaction([STORE_USERS], 'readwrite');
+                    const store = transaction.objectStore(STORE_USERS);
+                    const request = store.delete(username);
+                    request.onsuccess = () => {
+                        showToast('تم حذف المستخدم بنجاح.', 'success');
+                        loadUsers();
+                    };
+                    request.onerror = () => {
+                        showToast('فشل في حذف المستخدم.', 'error');
+                    };
+                }
+            });
+        });
+    }
+
+    addEditUserBtn.addEventListener('click', async () => {
+        const username = userUsernameInput.value.trim();
+        const password = userPasswordInput.value.trim();
+        const role = userRoleSelect.value;
+        
+        if (!username || (addEditUserBtn.textContent === 'إضافة' && !password)) {
+            showToast('الرجاء إدخال اسم المستخدم وكلمة المرور.', 'warning');
+            return;
+        }
+
+        const transaction = db.transaction([STORE_USERS], 'readwrite');
+        const store = transaction.objectStore(STORE_USERS);
+        
+        if (editingUser) {
+            // Edit existing user
+            const updatedUser = { ...editingUser, role };
+            if (password) {
+                updatedUser.password = password;
+            }
+            const request = store.put(updatedUser);
+            request.onsuccess = () => {
+                showToast('تم تحديث المستخدم بنجاح.', 'success');
+                resetUserForm();
+                loadUsers();
+            };
+            request.onerror = () => {
+                showToast('فشل في تحديث المستخدم.', 'error');
+            };
+        } else {
+            // Add new user
+            const newUser = { username, password, role };
+            const request = store.add(newUser);
+            request.onsuccess = () => {
+                showToast('تم إضافة المستخدم بنجاح.', 'success');
+                resetUserForm();
+                loadUsers();
+            };
+            request.onerror = (e) => {
+                if (e.target.error.name === 'ConstraintError') {
+                    showToast('اسم المستخدم هذا موجود بالفعل.', 'error');
+                } else {
+                    showToast('فشل في إضافة المستخدم.', 'error');
+                    console.error(e.target.error);
+                }
+            };
+        }
+    });
+
+
+    // Event Listeners
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = usernameInput.value;
+        const password = passwordInput.value;
+        const success = await loginUser(username, password);
+        if (success) {
+            loginContainer.classList.add('hidden');
+            mainAppContainer.classList.remove('hidden');
+            updateUIForUserRole();
+            clearForm();
+        }
+    });
+
+    logoutBtn.addEventListener('click', logoutUser);
+
+    addItemBtn.addEventListener('click', addItem);
+    discountInput.addEventListener('input', calculateTotalPrice);
+    phoneInput.addEventListener('input', () => {
+        const phone = phoneInput.value;
+        if (phone.length >= 10) {
+            searchCustomer(phone);
+        }
+    });
+
+    saveBtn.addEventListener('click', async () => {
+        const phone = phoneInput.value.trim();
+        const name = nameInput.value.trim();
+        const address = addressInput.value.trim();
+        const notes = notesInput.value.trim(); // Get notes value
+        const cashier = cashierNameInput.value.trim();
+        const driver = driverNameInput.value.trim();
+
+        if (!phone || !name || !address || !cashier || !driver) {
+            showToast('الرجاء ملء جميع معلومات العميل والموظفين.', 'error');
+            return;
+        }
+
+        const items = [];
+        const itemRows = orderItemsContainer.querySelectorAll('.item-row');
+        let hasValidItem = false;
+        itemRows.forEach(row => {
+            const itemName = row.querySelector('.item-name').value.trim();
+            const itemQty = parseFloat(row.querySelector('.item-qty').value);
+            const itemPrice = parseFloat(row.querySelector('.item-price').value);
+
+            if (itemName && itemQty > 0 && itemPrice > 0) {
+                items.push({
+                    name: itemName,
+                    qty: itemQty,
+                    price: itemPrice,
+                    total: itemQty * itemPrice
+                });
+                hasValidItem = true;
+            }
+        });
+
+        if (!hasValidItem) {
+            showToast('الرجاء إضافة صنف واحد على الأقل باسم وكمية وسعر صحيحين.', 'error');
+            return;
+        }
+        
+        const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+        const discountPercentage = parseFloat(discountInput.value) || 0;
+        const discountAmount = subtotal * (discountPercentage / 100);
+        const total = subtotal - discountAmount;
+        const branchName = sessionStorage.getItem('currentBranch');
+
+        const customerData = { phone, name, address };
+        const orderData = {
+            customer: customerData,
+            items,
+            subtotal,
+            discountPercentage,
+            discount: discountAmount,
+            total,
+            cashier,
+            driver,
+            notes, // Add notes to the order data
+            date: Date.now(),
+            branch: branchName
+        };
+
+        try {
+            const invoiceId = await saveOrder(orderData);
+            saveCustomer(customerData);
+            showToast(`تم حفظ الفاتورة #${invoiceId} بنجاح!`, 'success');
+            lastSavedOrder = { ...orderData, invoiceId };
+            isPrintingEnabled = true;
+            togglePrintButtonState();
+        } catch (error) {
+            showToast('فشل في حفظ الفاتورة.', 'error');
+            console.error(error);
+        }
+    });
+
+    printBtn.addEventListener('click', () => {
+        printInvoice(lastSavedOrder.invoiceId, lastSavedOrder);
+    });
+
+    clearBtn.addEventListener('click', clearForm);
+
+    showReportsBtn.addEventListener('click', () => {
+        reportsModal.classList.remove('hidden');
+    });
+
+    closeReportsBtn.addEventListener('click', () => {
+        reportsModal.classList.add('hidden');
+    });
+
+    generateReportBtn.addEventListener('click', generateReport);
+    exportExcelBtn.addEventListener('click', exportToExcel);
+    exportCustomersBtn.addEventListener('click', exportCustomers);
+    
+    // Backup & Restore event listeners
+    backupDbBtn.addEventListener('click', backupDatabase);
+    restoreDbBtn.addEventListener('click', () => {
+        restoreFileInput.click();
+    });
+    restoreFileInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            restoreDatabase(file);
+        }
+    });
+
+    manageItemsBtn.addEventListener('click', () => {
+        manageItemsModal.classList.remove('hidden');
+        loadItems();
+    });
+
+    closeManageItemsBtn.addEventListener('click', () => {
+        manageItemsModal.classList.add('hidden');
+    });
+
+    addNewItemBtn.addEventListener('click', async () => {
+        const name = itemNameInput.value.trim();
+        const price = itemPriceInput.value;
+        if (!name || isNaN(parseFloat(price)) || parseFloat(price) <= 0) {
+            showToast('الرجاء إدخال اسم صنف وسعر صالحين.', 'warning');
+            return;
+        }
+        
+        try {
+            await saveItem(name, price);
+            showToast('تم حفظ الصنف بنجاح!', 'success');
+            itemNameInput.value = '';
+            itemPriceInput.value = '';
+            loadItems();
+        } catch (error) {
+            showToast('فشل في حفظ الصنف. قد يكون اسم الصنف موجودًا بالفعل.', 'error');
+            console.error(error);
+        }
+    });
+
+    importItemsBtn.addEventListener('click', () => {
+        importItemsFile.click();
+    });
+
+    importItemsFile.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            fileNameSpan.textContent = file.name;
+            importItemsFromExcel(file);
+        }
+    });
+
+    manageBranchesBtn.addEventListener('click', () => {
+        manageBranchesModal.classList.remove('hidden');
+        loadBranches();
+    });
+
+    closeManageBranchesBtn.addEventListener('click', () => {
+        manageBranchesModal.classList.add('hidden');
+    });
+
+    addNewBranchBtn.addEventListener('click', async () => {
+        const branchName = branchNameInput.value.trim();
+        if (!branchName) {
+            showToast('الرجاء إدخال اسم الفرع.', 'warning');
+            return;
+        }
+
+        try {
+            await saveBranch(branchName);
+            showToast('تم إضافة الفرع بنجاح.', 'success');
+            branchNameInput.value = '';
+            loadBranches();
+        } catch (error) {
+            showToast('فشل في إضافة الفرع. قد يكون الاسم موجوداً بالفعل.', 'error');
+            console.error(error);
+        }
+    });
+
+    manageUsersBtn.addEventListener('click', () => {
+        manageUsersModal.classList.remove('hidden');
+        resetUserForm();
+        loadUsers();
+    });
+    
+    closeManageUsersBtn.addEventListener('click', () => {
+        manageUsersModal.classList.add('hidden');
+    });
+
+    // Initial setup
+    document.addEventListener('DOMContentLoaded', () => {
+        initDb().then(() => {
+            loadItems();
+            loadBranches();
+            const savedUser = sessionStorage.getItem('currentUser');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+                loginContainer.classList.add('hidden');
+                mainAppContainer.classList.remove('hidden');
+                updateUIForUserRole();
+                clearForm();
+            } else {
+                loginContainer.classList.remove('hidden');
+                mainAppContainer.classList.add('hidden');
+            }
+        }).catch(err => {
+            showToast('فشل في تهيئة قاعدة البيانات.', 'error');
+            console.error(err);
+        });
+    });
+
+    togglePrintButtonState();
+
+</script>
+</body>
+</html>
